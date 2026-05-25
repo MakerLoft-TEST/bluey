@@ -30,44 +30,66 @@
             flex-direction: column;
             justify-content: center;
             align-items: center;
+            z-index: 20;
         }
         .score-display {
             position: absolute;
             top: 20px;
-            font-size: 2rem;
-            font-weight: bold;
+            left: 50%;
+            transform: translateX(-50%);
+            font-size: 3.5rem;
+            font-weight: 900;
             color: #fff;
-            text-shadow: 2px 2px 4px rgba(0,0,0,0.5);
+            text-shadow: 4px 4px 0 #3B82F6, -2px -2px 0 #3B82F6, 2px -2px 0 #3B82F6, -2px 2px 0 #3B82F6, 2px 2px 0 #3B82F6, 5px 5px 15px rgba(0,0,0,0.5);
             pointer-events: none;
+            z-index: 10;
+            letter-spacing: 2px;
+        }
+        @keyframes pop {
+            0% { transform: translateX(-50%) scale(1); }
+            40% { transform: translateX(-50%) scale(1.5) rotate(-5deg); color: #FFD700; }
+            100% { transform: translateX(-50%) scale(1); }
+        }
+        .score-pop {
+            animation: pop 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275);
         }
         .start-screen, .game-over-screen {
-            background: rgba(255, 255, 255, 0.9);
-            padding: 2rem;
-            border-radius: 1rem;
+            background: rgba(255, 255, 255, 0.95);
+            padding: 2.5rem;
+            border-radius: 1.5rem;
             text-align: center;
-            box-shadow: 0 10px 25px rgba(0,0,0,0.2);
+            box-shadow: 0 15px 35px rgba(0,0,0,0.3);
             pointer-events: auto;
-            border: 4px solid #3B82F6; /* Bluey blue */
+            border: 5px solid #3B82F6;
+            transform: scale(0.9);
+            animation: screenIn 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275) forwards;
+        }
+        @keyframes screenIn {
+            to { transform: scale(1); }
         }
         button {
             background-color: #EF4444; /* Balloon red */
             color: white;
             border: none;
-            padding: 10px 20px;
-            font-size: 1.2rem;
+            padding: 12px 30px;
+            font-size: 1.4rem;
             border-radius: 9999px;
             cursor: pointer;
-            font-weight: bold;
-            margin-top: 1rem;
-            transition: transform 0.1s, background-color 0.2s;
-            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+            font-weight: 900;
+            margin-top: 1.5rem;
+            transition: all 0.1s;
+            box-shadow: 0 6px 0 #B91C1C, 0 10px 10px rgba(0,0,0,0.2);
+            text-transform: uppercase;
+            letter-spacing: 1px;
         }
         button:hover {
             background-color: #DC2626;
-            transform: scale(1.05);
+            transform: translateY(2px);
+            box-shadow: 0 4px 0 #B91C1C, 0 5px 5px rgba(0,0,0,0.2);
         }
         button:active {
-            transform: scale(0.95);
+            transform: translateY(6px);
+            box-shadow: 0 0 0 #B91C1C;
         }
     </style>
 </head>
@@ -75,20 +97,20 @@
 
     <canvas id="gameCanvas"></canvas>
     
-    <div class="score-display w-full text-center" id="scoreDisplay" style="display: none;">Score: 0</div>
+    <div class="score-display" id="scoreDisplay" style="display: none;">0</div>
 
     <div class="ui-layer" id="uiLayer">
         <div class="start-screen" id="startScreen">
-            <h1 class="text-4xl font-extrabold text-blue-600 mb-2">Keepy Uppy!</h1>
-            <p class="text-gray-700 mb-4">Don't let the red balloon touch the ground.</p>
-            <p class="text-sm text-gray-500 mb-4">Use Left/Right arrows or drag to move.</p>
+            <h1 class="text-5xl font-black text-blue-600 mb-3 drop-shadow-md tracking-wide">KEEPY UPPY!</h1>
+            <p class="text-lg text-gray-800 mb-4 font-bold">Don't let the balloon touch the ground!</p>
+            <p class="text-md text-gray-600 mb-6 bg-gray-100 p-3 rounded-lg border border-gray-200">Use Left/Right arrows or drag</p>
             <button onclick="startGame()">Play Now</button>
         </div>
 
         <div class="game-over-screen" id="gameOverScreen" style="display: none;">
-            <h1 class="text-4xl font-extrabold text-red-500 mb-2">Oh Biscuits!</h1>
-            <p class="text-xl text-gray-800 mb-2">The balloon hit the ground.</p>
-            <p class="text-2xl font-bold text-blue-600 mb-4">Score: <span id="finalScore">0</span></p>
+            <h1 class="text-5xl font-black text-red-500 mb-3 drop-shadow-md tracking-wide">Oh Biscuits!</h1>
+            <p class="text-xl text-gray-800 mb-3 font-bold">The balloon hit the ground.</p>
+            <p class="text-3xl font-black text-blue-600 mb-6 bg-blue-50 p-4 rounded-xl border-2 border-blue-200">Score: <span id="finalScore">0</span></p>
             <button onclick="startGame()">Play Again</button>
         </div>
     </div>
@@ -103,7 +125,7 @@
 
         // Responsive canvas
         function resizeCanvas() {
-            canvas.width = Math.min(window.innerWidth, 600);
+            canvas.width = Math.min(window.innerWidth, 800);
             canvas.height = window.innerHeight;
             if(player) {
                 player.y = canvas.height - player.height - 40; // 40 is grass height
@@ -115,6 +137,13 @@
         let score = 0;
         let gameActive = false;
 
+        // Visual FX State
+        let screenShake = 0;
+        let screenZoom = 1;
+        let particles = [];
+        let floatingTexts = [];
+        let trail = [];
+
         // Colors
         const BLUEY_COLOR = '#60A5FA';
         const BLUEY_DARK = '#2563EB';
@@ -125,7 +154,7 @@
             height: 60,
             x: 0,
             y: 0,
-            speed: 8,
+            speed: 10,
             dx: 0,
             targetX: null
         };
@@ -136,9 +165,9 @@
             y: 0,
             dx: 0,
             dy: 0,
-            gravity: 0.15,
+            gravity: 0.2,
             bounce: -0.85,
-            baseDy: -8
+            baseDy: -9
         };
 
         function initEntities() {
@@ -288,19 +317,26 @@
             balloon.x += balloon.dx;
             balloon.y += balloon.dy;
 
+            // FX: Balloon Trail
+            trail.push({x: balloon.x, y: balloon.y, radius: balloon.radius});
+            if (trail.length > 7) trail.shift();
+
             // Wall collision
             if (balloon.x - balloon.radius < 0) {
                 balloon.x = balloon.radius;
                 balloon.dx *= -1;
+                screenShake = 3;
             } else if (balloon.x + balloon.radius > canvas.width) {
                 balloon.x = canvas.width - balloon.radius;
                 balloon.dx *= -1;
+                screenShake = 3;
             }
 
             // Ceiling collision
             if (balloon.y - balloon.radius < 0) {
                 balloon.y = balloon.radius;
                 balloon.dy *= -1;
+                screenShake = 3;
             }
 
             // Player collision (Keepy Uppy!)
@@ -315,34 +351,143 @@
                 
                 // Add some variation to bounce based on where it hit
                 const hitPoint = (balloon.x - (player.x + player.width / 2)) / (player.width / 2);
-                balloon.dx = hitPoint * 5;
+                balloon.dx = hitPoint * 6;
                 
                 // Increase speed slightly over time
-                const speedModifier = Math.min(1.5, 1 + score * 0.02);
+                const speedModifier = Math.min(1.6, 1 + score * 0.03);
                 balloon.dy = balloon.baseDy * speedModifier;
                 
                 score++;
-                scoreDisplay.textContent = `Score: ${score}`;
+                scoreDisplay.textContent = score;
+
+                // --- ARCADE FX ---
+                
+                // 1. CSS Pop
+                scoreDisplay.classList.remove('score-pop');
+                void scoreDisplay.offsetWidth; // trigger reflow
+                scoreDisplay.classList.add('score-pop');
+
+                // 2. Camera Punch
+                screenShake = 15 + Math.min(score, 10);
+                screenZoom = 1.08;
+
+                // 3. Explosion Particles
+                for(let i=0; i<25; i++) {
+                    particles.push({
+                        x: balloon.x,
+                        y: player.y,
+                        dx: (Math.random() - 0.5) * 16,
+                        dy: (Math.random() - 1) * 12,
+                        life: 1,
+                        color: ['#EF4444', '#FFFFFF', '#FDE047', '#60A5FA'][Math.floor(Math.random()*4)],
+                        size: Math.random() * 6 + 3
+                    });
+                }
+
+                // 4. Floating Arcade Text
+                const words = ["BOING!", "WHACK!", "BOP!", "KEEPY!", "UPPY!", "BING!"];
+                floatingTexts.push({
+                    x: balloon.x,
+                    y: player.y - 30,
+                    text: words[Math.floor(Math.random()*words.length)],
+                    life: 1,
+                    dy: -3
+                });
             }
+
+            // FX: Update Particles
+            for (let i = particles.length - 1; i >= 0; i--) {
+                let p = particles[i];
+                p.x += p.dx;
+                p.y += p.dy;
+                p.dy += 0.4; // gravity
+                p.life -= 0.02;
+                if (p.life <= 0) particles.splice(i, 1);
+            }
+
+            // FX: Update Floating Texts
+            for (let i = floatingTexts.length - 1; i >= 0; i--) {
+                let ft = floatingTexts[i];
+                ft.y += ft.dy;
+                ft.life -= 0.02;
+                if (ft.life <= 0) floatingTexts.splice(i, 1);
+            }
+
+            // FX: Camera decay
+            screenShake *= 0.85;
+            if (screenShake < 0.1) screenShake = 0;
+            screenZoom = 1 + (screenZoom - 1) * 0.85;
 
             // Game Over
             if (balloon.y - balloon.radius > canvas.height - 40) { // Check against grass height
+                screenShake = 25; // Massive shake on game over
                 endGame();
             }
         }
 
         function draw() {
-            // Background
-            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            ctx.save();
             
+            // Apply Camera Shake and Zoom
+            let shakeX = (Math.random() - 0.5) * screenShake;
+            let shakeY = (Math.random() - 0.5) * screenShake;
+
+            ctx.translate(canvas.width / 2, canvas.height / 2);
+            ctx.scale(screenZoom, screenZoom);
+            ctx.translate(-canvas.width / 2 + shakeX, -canvas.height / 2 + shakeY);
+
+            // Clear and draw oversized background to prevent edge peek
+            ctx.fillStyle = '#87CEEB';
+            ctx.fillRect(-150, -150, canvas.width + 300, canvas.height + 300);
+
             // Grass
             ctx.fillStyle = '#4ADE80';
-            ctx.fillRect(0, canvas.height - 40, canvas.width, 40);
+            ctx.fillRect(-150, canvas.height - 40, canvas.width + 300, 40 + 150);
 
-            if (gameActive) {
+            if (gameActive || !gameActive) {
+                // Draw Trail
+                for (let i = 0; i < trail.length; i++) {
+                    const t = trail[i];
+                    ctx.fillStyle = `rgba(239, 68, 68, ${i / trail.length * 0.4})`;
+                    ctx.beginPath();
+                    ctx.ellipse(t.x, t.y, t.radius * (i / trail.length), t.radius * 1.1 * (i / trail.length), 0, 0, Math.PI * 2);
+                    ctx.fill();
+                }
+
                 drawPlayer();
                 drawBalloon();
+
+                // Draw Particles
+                particles.forEach(p => {
+                    ctx.fillStyle = p.color;
+                    ctx.globalAlpha = p.life;
+                    ctx.beginPath();
+                    ctx.arc(p.x, p.y, p.size, 0, Math.PI * 2);
+                    ctx.fill();
+                    ctx.globalAlpha = 1.0;
+                });
+
+                // Draw Floating Texts
+                ctx.font = '900 28px "Comic Sans MS", "Chalkboard SE", sans-serif';
+                ctx.textAlign = 'center';
+                floatingTexts.forEach(ft => {
+                    ctx.globalAlpha = ft.life;
+                    ctx.fillStyle = '#FFD700';
+                    ctx.strokeStyle = '#000';
+                    ctx.lineWidth = 5;
+                    
+                    let scale = 1 + (1 - ft.life) * 0.5;
+                    ctx.save();
+                    ctx.translate(ft.x, ft.y);
+                    ctx.scale(scale, scale);
+                    ctx.strokeText(ft.text, 0, 0);
+                    ctx.fillText(ft.text, 0, 0);
+                    ctx.restore();
+                    ctx.globalAlpha = 1.0;
+                });
             }
+
+            ctx.restore();
         }
 
         function gameLoop() {
@@ -355,8 +500,17 @@
         function startGame() {
             resizeCanvas();
             initEntities();
+            
+            // Reset state
             score = 0;
-            scoreDisplay.textContent = 'Score: 0';
+            screenShake = 0;
+            screenZoom = 1;
+            particles = [];
+            floatingTexts = [];
+            trail = [];
+            
+            scoreDisplay.textContent = '0';
+            scoreDisplay.classList.remove('score-pop');
             
             startScreen.style.display = 'none';
             gameOverScreen.style.display = 'none';
@@ -372,7 +526,7 @@
             scoreDisplay.style.display = 'none';
             finalScoreSpan.textContent = score;
             gameOverScreen.style.display = 'block';
-            draw(); // Draw final state
+            draw(); // Draw final state with shake
         }
 
         // Initialize display
