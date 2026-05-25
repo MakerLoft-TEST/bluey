@@ -1,35 +1,383 @@
-<!doctype html>
+<!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="utf-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>Bluey</title>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Keepy Uppy - Bluey Inspired Arcade Game</title>
+    <script src="https://cdn.tailwindcss.com"></script>
     <style>
-        :root { color-scheme: light dark; }
-        html, body { margin: 0; padding: 0; }
         body {
-            min-height: 100vh;
-            display: grid;
-            place-items: center;
-            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
-            background: #fafafa;
-            color: #171717;
-            text-align: center;
-            padding: 2rem;
+            margin: 0;
+            overflow: hidden;
+            background-color: #87CEEB; /* Sky blue background */
+            font-family: 'Comic Sans MS', 'Chalkboard SE', 'Comic Neue', sans-serif;
+            touch-action: none;
         }
-        main { max-width: 32rem; }
-        h1 { font-size: 2rem; font-weight: 600; margin: 0 0 1rem; }
-        p { font-size: 1rem; line-height: 1.6; margin: 0; color: #525252; }
-        @media (prefers-color-scheme: dark) {
-            body { background: #0a0a0a; color: #fafafa; }
-            p { color: #a3a3a3; }
+        #gameCanvas {
+            display: block;
+            margin: 0 auto;
+            background: linear-gradient(to bottom, #87CEEB 0%, #E0F6FF 100%);
+            box-shadow: 0 0 20px rgba(0,0,0,0.2);
+        }
+        .ui-layer {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            pointer-events: none;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+        }
+        .score-display {
+            position: absolute;
+            top: 20px;
+            font-size: 2rem;
+            font-weight: bold;
+            color: #fff;
+            text-shadow: 2px 2px 4px rgba(0,0,0,0.5);
+            pointer-events: none;
+        }
+        .start-screen, .game-over-screen {
+            background: rgba(255, 255, 255, 0.9);
+            padding: 2rem;
+            border-radius: 1rem;
+            text-align: center;
+            box-shadow: 0 10px 25px rgba(0,0,0,0.2);
+            pointer-events: auto;
+            border: 4px solid #3B82F6; /* Bluey blue */
+        }
+        button {
+            background-color: #EF4444; /* Balloon red */
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            font-size: 1.2rem;
+            border-radius: 9999px;
+            cursor: pointer;
+            font-weight: bold;
+            margin-top: 1rem;
+            transition: transform 0.1s, background-color 0.2s;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+        }
+        button:hover {
+            background-color: #DC2626;
+            transform: scale(1.05);
+        }
+        button:active {
+            transform: scale(0.95);
         }
     </style>
 </head>
 <body>
-    <main>
-        <h1>Bluey</h1>
-        <p>Tell the chat what you want here, and it will appear at this address.</p>
-    </main>
+
+    <canvas id="gameCanvas"></canvas>
+    
+    <div class="score-display w-full text-center" id="scoreDisplay" style="display: none;">Score: 0</div>
+
+    <div class="ui-layer" id="uiLayer">
+        <div class="start-screen" id="startScreen">
+            <h1 class="text-4xl font-extrabold text-blue-600 mb-2">Keepy Uppy!</h1>
+            <p class="text-gray-700 mb-4">Don't let the red balloon touch the ground.</p>
+            <p class="text-sm text-gray-500 mb-4">Use Left/Right arrows or drag to move.</p>
+            <button onclick="startGame()">Play Now</button>
+        </div>
+
+        <div class="game-over-screen" id="gameOverScreen" style="display: none;">
+            <h1 class="text-4xl font-extrabold text-red-500 mb-2">Oh Biscuits!</h1>
+            <p class="text-xl text-gray-800 mb-2">The balloon hit the ground.</p>
+            <p class="text-2xl font-bold text-blue-600 mb-4">Score: <span id="finalScore">0</span></p>
+            <button onclick="startGame()">Play Again</button>
+        </div>
+    </div>
+
+    <script>
+        const canvas = document.getElementById('gameCanvas');
+        const ctx = canvas.getContext('2d');
+        const startScreen = document.getElementById('startScreen');
+        const gameOverScreen = document.getElementById('gameOverScreen');
+        const scoreDisplay = document.getElementById('scoreDisplay');
+        const finalScoreSpan = document.getElementById('finalScore');
+
+        // Responsive canvas
+        function resizeCanvas() {
+            canvas.width = Math.min(window.innerWidth, 600);
+            canvas.height = window.innerHeight;
+            if(player) {
+                player.y = canvas.height - player.height - 40; // 40 is grass height
+            }
+        }
+        window.addEventListener('resize', resizeCanvas);
+
+        let animationId;
+        let score = 0;
+        let gameActive = false;
+
+        // Colors
+        const BLUEY_COLOR = '#60A5FA';
+        const BLUEY_DARK = '#2563EB';
+        const BALLOON_COLOR = '#EF4444';
+
+        const player = {
+            width: 80,
+            height: 60,
+            x: 0,
+            y: 0,
+            speed: 8,
+            dx: 0,
+            targetX: null
+        };
+
+        const balloon = {
+            radius: 25,
+            x: 0,
+            y: 0,
+            dx: 0,
+            dy: 0,
+            gravity: 0.15,
+            bounce: -0.85,
+            baseDy: -8
+        };
+
+        function initEntities() {
+            player.x = canvas.width / 2 - player.width / 2;
+            player.y = canvas.height - player.height - 40;
+            player.dx = 0;
+            player.targetX = null;
+
+            balloon.x = canvas.width / 2;
+            balloon.y = 100;
+            balloon.dx = (Math.random() - 0.5) * 6;
+            balloon.dy = 0;
+        }
+
+        // Controls
+        const keys = {
+            ArrowLeft: false,
+            ArrowRight: false
+        };
+
+        window.addEventListener('keydown', e => {
+            if (keys.hasOwnProperty(e.code)) {
+                keys[e.code] = true;
+            }
+        });
+
+        window.addEventListener('keyup', e => {
+            if (keys.hasOwnProperty(e.code)) {
+                keys[e.code] = false;
+            }
+        });
+
+        // Touch / Mouse controls
+        let isDragging = false;
+        
+        function handleMove(e) {
+            if (!gameActive) return;
+            const clientX = e.touches ? e.touches[0].clientX : e.clientX;
+            const rect = canvas.getBoundingClientRect();
+            player.targetX = clientX - rect.left - player.width / 2;
+        }
+
+        canvas.addEventListener('mousedown', e => { isDragging = true; handleMove(e); });
+        canvas.addEventListener('mousemove', e => { if (isDragging) handleMove(e); });
+        window.addEventListener('mouseup', () => { isDragging = false; player.targetX = null; });
+        
+        canvas.addEventListener('touchstart', e => { handleMove(e); }, {passive: true});
+        canvas.addEventListener('touchmove', e => { handleMove(e); }, {passive: true});
+        canvas.addEventListener('touchend', () => { player.targetX = null; });
+
+        function drawPlayer() {
+            ctx.fillStyle = BLUEY_COLOR;
+            // Draw a rounded rectangle for the dog body
+            ctx.beginPath();
+            ctx.roundRect(player.x, player.y, player.width, player.height, 10);
+            ctx.fill();
+
+            // Ears
+            ctx.fillStyle = BLUEY_DARK;
+            ctx.beginPath();
+            ctx.moveTo(player.x + 10, player.y);
+            ctx.lineTo(player.x - 5, player.y - 20);
+            ctx.lineTo(player.x + 25, player.y);
+            ctx.fill();
+
+            ctx.beginPath();
+            ctx.moveTo(player.x + player.width - 10, player.y);
+            ctx.lineTo(player.x + player.width + 5, player.y - 20);
+            ctx.lineTo(player.x + player.width - 25, player.y);
+            ctx.fill();
+
+            // Eyes
+            ctx.fillStyle = 'white';
+            ctx.beginPath();
+            ctx.arc(player.x + 25, player.y + 20, 8, 0, Math.PI * 2);
+            ctx.arc(player.x + player.width - 25, player.y + 20, 8, 0, Math.PI * 2);
+            ctx.fill();
+
+            ctx.fillStyle = 'black';
+            ctx.beginPath();
+            ctx.arc(player.x + 25, player.y + 20, 3, 0, Math.PI * 2);
+            ctx.arc(player.x + player.width - 25, player.y + 20, 3, 0, Math.PI * 2);
+            ctx.fill();
+            
+            // Snout
+            ctx.fillStyle = '#FDE047'; // light yellow/tan
+            ctx.beginPath();
+            ctx.roundRect(player.x + 20, player.y + 35, 40, 20, 8);
+            ctx.fill();
+
+            // Nose
+            ctx.fillStyle = 'black';
+            ctx.beginPath();
+            ctx.arc(player.x + player.width / 2, player.y + 35, 6, 0, Math.PI * 2);
+            ctx.fill();
+        }
+
+        function drawBalloon() {
+            ctx.fillStyle = BALLOON_COLOR;
+            ctx.beginPath();
+            // Oval shape
+            ctx.ellipse(balloon.x, balloon.y, balloon.radius, balloon.radius * 1.1, 0, 0, Math.PI * 2);
+            ctx.fill();
+
+            // Balloon tie
+            ctx.beginPath();
+            ctx.moveTo(balloon.x, balloon.y + balloon.radius * 1.1);
+            ctx.lineTo(balloon.x - 5, balloon.y + balloon.radius * 1.1 + 8);
+            ctx.lineTo(balloon.x + 5, balloon.y + balloon.radius * 1.1 + 8);
+            ctx.fill();
+            
+            // String
+            ctx.strokeStyle = 'white';
+            ctx.lineWidth = 1;
+            ctx.beginPath();
+            ctx.moveTo(balloon.x, balloon.y + balloon.radius * 1.1 + 8);
+            ctx.quadraticCurveTo(balloon.x - 10, balloon.y + balloon.radius * 1.5, balloon.x + 5, balloon.y + balloon.radius * 2);
+            ctx.stroke();
+
+            // Highlight
+            ctx.fillStyle = 'rgba(255, 255, 255, 0.4)';
+            ctx.beginPath();
+            ctx.ellipse(balloon.x - 8, balloon.y - 10, 6, 10, Math.PI / 4, 0, Math.PI * 2);
+            ctx.fill();
+        }
+
+        function update() {
+            // Player movement
+            if (player.targetX !== null) {
+                const dx = player.targetX - player.x;
+                if (Math.abs(dx) > player.speed) {
+                    player.x += Math.sign(dx) * player.speed;
+                } else {
+                    player.x = player.targetX;
+                }
+            } else {
+                if (keys.ArrowLeft) player.x -= player.speed;
+                if (keys.ArrowRight) player.x += player.speed;
+            }
+
+            // Boundaries for player
+            if (player.x < 0) player.x = 0;
+            if (player.x + player.width > canvas.width) player.x = canvas.width - player.width;
+
+            // Balloon physics
+            balloon.dy += balloon.gravity;
+            balloon.x += balloon.dx;
+            balloon.y += balloon.dy;
+
+            // Wall collision
+            if (balloon.x - balloon.radius < 0) {
+                balloon.x = balloon.radius;
+                balloon.dx *= -1;
+            } else if (balloon.x + balloon.radius > canvas.width) {
+                balloon.x = canvas.width - balloon.radius;
+                balloon.dx *= -1;
+            }
+
+            // Ceiling collision
+            if (balloon.y - balloon.radius < 0) {
+                balloon.y = balloon.radius;
+                balloon.dy *= -1;
+            }
+
+            // Player collision (Keepy Uppy!)
+            if (balloon.dy > 0 && 
+                balloon.y + balloon.radius > player.y && 
+                balloon.y - balloon.radius < player.y + player.height &&
+                balloon.x + balloon.radius > player.x && 
+                balloon.x - balloon.radius < player.x + player.width) {
+                
+                // Bounce
+                balloon.y = player.y - balloon.radius;
+                
+                // Add some variation to bounce based on where it hit
+                const hitPoint = (balloon.x - (player.x + player.width / 2)) / (player.width / 2);
+                balloon.dx = hitPoint * 5;
+                
+                // Increase speed slightly over time
+                const speedModifier = Math.min(1.5, 1 + score * 0.02);
+                balloon.dy = balloon.baseDy * speedModifier;
+                
+                score++;
+                scoreDisplay.textContent = `Score: ${score}`;
+            }
+
+            // Game Over
+            if (balloon.y - balloon.radius > canvas.height - 40) { // Check against grass height
+                endGame();
+            }
+        }
+
+        function draw() {
+            // Background
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            
+            // Grass
+            ctx.fillStyle = '#4ADE80';
+            ctx.fillRect(0, canvas.height - 40, canvas.width, 40);
+
+            if (gameActive) {
+                drawPlayer();
+                drawBalloon();
+            }
+        }
+
+        function gameLoop() {
+            if (!gameActive) return;
+            update();
+            draw();
+            animationId = requestAnimationFrame(gameLoop);
+        }
+
+        function startGame() {
+            resizeCanvas();
+            initEntities();
+            score = 0;
+            scoreDisplay.textContent = 'Score: 0';
+            
+            startScreen.style.display = 'none';
+            gameOverScreen.style.display = 'none';
+            scoreDisplay.style.display = 'block';
+            
+            gameActive = true;
+            cancelAnimationFrame(animationId);
+            gameLoop();
+        }
+
+        function endGame() {
+            gameActive = false;
+            scoreDisplay.style.display = 'none';
+            finalScoreSpan.textContent = score;
+            gameOverScreen.style.display = 'block';
+            draw(); // Draw final state
+        }
+
+        // Initialize display
+        resizeCanvas();
+        draw(); // initial draw
+    </script>
 </body>
 </html>
